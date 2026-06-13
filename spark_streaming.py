@@ -208,7 +208,7 @@ def write_gold(stream_df):
     query = (
         gold_df.writeStream
         .format("delta")
-        .outputMode("update")          # HARUS "update" untuk aggregasi dengan watermark
+        .outputMode("complete")          # Gunakan "complete" untuk Delta Lake dengan aggregasi
         .option("checkpointLocation", CHECKPOINT_GOLD)
         .option("mergeSchema", "true")
         .partitionBy("event_date")

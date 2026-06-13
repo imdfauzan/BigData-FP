@@ -1,0 +1,42 @@
+FROM eclipse-temurin:17-jdk-jammy
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Spark
+ENV SPARK_VERSION=3.5.0
+RUN cd /opt && \
+    wget https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz && \
+    tar -xzf spark-${SPARK_VERSION}-bin-hadoop3.tgz && \
+    rm spark-${SPARK_VERSION}-bin-hadoop3.tgz && \
+    mv spark-${SPARK_VERSION}-bin-hadoop3 spark
+
+ENV SPARK_HOME=/opt/spark
+ENV PATH=$SPARK_HOME/bin:$PATH
+ENV PYTHONPATH=$SPARK_HOME/python:$PYTHONPATH
+
+# Install Python packages
+RUN pip3 install --no-cache-dir \
+    pyspark==3.5.0 \
+    delta-spark==3.2.0 \
+    kafka-python
+
+# Create working directory
+WORKDIR /opt/spark-app
+
+# Copy spark script
+COPY spark_streaming.py /opt/spark-app/
+
+CMD ["spark-submit", \
+     "--packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,io.delta:delta-spark_2.12:3.2.0", \
+     "--conf", "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension", \
+     "--conf", "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog", \
+     "--conf", "spark.sql.shuffle.partitions=4", \
+     "--conf", "spark.driver.memory=1g", \
+     "--conf", "spark.executor.memory=1g", \
+     "/opt/spark-app/spark_streaming.py"]
