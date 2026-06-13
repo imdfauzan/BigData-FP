@@ -1,4 +1,7 @@
 # docker-compose-lite.yml
+# Orang 2 - Kafka / Message Broker setup
+# Dual listener: PLAINTEXT (untuk akses dari host, dipakai traffic_monitor.py)
+#                DOCKER    (untuk akses antar-container di network bigdata-net, dipakai Spark)
 version: '3'
 services:
   kafka:
@@ -6,14 +9,34 @@ services:
     container_name: kafka-lite
     ports:
       - "9092:9092"
+      - "29092:29092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,DOCKER://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,DOCKER://kafka-lite:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_RETENTION_HOURS: 2
       KAFKA_LOG_SEGMENT_BYTES: 10485760
+    networks:
+      - bigdata-net
+
+  # Skeleton service untuk Orang 3 (Spark Structured Streaming)
+  # Sengaja masih kosong/minimal - tinggal dilengkapi oleh Orang 3
+  spark:
+    image: bitnami/spark:3.5
+    container_name: spark-stream
+    depends_on:
+      - kafka
+    networks:
+      - bigdata-net
+    # tambahkan volumes, command, dll sesuai kebutuhan script Spark Orang 3
+
+networks:
+  bigdata-net:
+    driver: bridge

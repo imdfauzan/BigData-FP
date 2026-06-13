@@ -40,7 +40,18 @@ BigData-FP/
     - Akan menghasilkan teks JSON yang siap masuk ke Kafka
 
 2. Run Stream Processing (Kafka & Spark)
-    - [ON PROGRESS]
+    - Jalankan Kafka broker:
+      ```bash
+      docker compose up -d
+      ```
+    - Buat topic (sekali saja, kalau belum ada):
+      ```bash
+      docker exec -it kafka-lite /opt/kafka/bin/kafka-topics.sh \
+        --create --topic surabaya-traffic-bikeline-violations \
+        --bootstrap-server localhost:9092 \
+        --partitions 3 --replication-factor 1 --config retention.ms=7200000
+      ```
+    - Spark Structured Streaming: [ON PROGRESS - Orang 3]
 
 ## Arsitektur Sistem & Flow Pipeline
 Sistem ini dirancang agar dapat memisahkan beban kerja berat (AI Inference) di sisi hulu dengan beban kerja pemrosesan data (Stream Processing) di sisi tengah.
@@ -126,3 +137,81 @@ Contoh Output:
     - Hotspot (titik lokasi) CCTV dengan tingkat pelanggaran tertinggi di Surabaya.
     - Tren jam dan hari rawan penyerobotan jalur sepeda.
     - Proporsi jenis kendaraan yang paling sering melanggar (motor vs mobil vs lainnya).
+---
+
+## Kafka Setup & Handoff (Orang 2 → Orang 3)
+
+### Status
+Kafka broker (`kafka-lite`) sudah running via Docker Compose dengan dual listener (host + internal docker network), topic sudah dibuat dan diverifikasi end-to-end dari producer (`traffic_monitor.py`) sampai consumer test.
+
+### Koneksi ke Kafka
+
+| Konteks | Bootstrap Server |
+|---|---|
+| Dari **host** (script Python via `.venv`, testing) | `localhost:9092` |
+| Dari **container lain** di network `bigdata-net` (misal Spark container) | `kafka-lite:29092` |
+
+> Jika service Spark milik Orang 3 dijalankan via docker-compose, pastikan service tersebut ikut bergabung ke network `bigdata-net` agar bisa resolve hostname `kafka-lite`.
+
+### Topic
+
+- Nama topic: `surabaya-traffic-bikeline-violations`
+- Partitions: 3
+- Replication factor: 1
+- Retention: 2 jam (7.200.000 ms)
+
+Cek konfigurasi:
+```bash
+docker exec -it kafka-lite /opt/kafka/bin/kafka-topics.sh \
+  --describe --topic surabaya-traffic-bikeline-violations \
+  --bootstrap-server localhost:9092
+```
+
+### Skema Payload JSON
+
+```json
+{
+  "camera_id": "CCTV_BASRA_LOOP",
+  "location": "Depan TP1",
+  "timestamp": "2026-06-13T02:36:02Z",
+  "vehicle_type": "motorcycle",
+  "confidence_score": 0.3766
+}
+```
+
+Field detail:
+- `camera_id` (string): salah satu dari `CCTV_BASUKI_RAHMAT`, `CCTV_BAMBU_RUNCING`, `CCTV_BASRA_LOOP`, `CCTV_DARMO_MERCURE`.
+- `location` (string): nama lokasi human-readable.
+- `timestamp` (string, ISO 8601 UTC, format `%Y-%m-%dT%H:%M:%SZ`): waktu deteksi.
+- `vehicle_type` (string): salah satu dari `car`, `motorcycle`, `bus`, `truck`.
+- `confidence_score` (float, 4 desimal): confidence score deteksi YOLO.
+
+Catatan untuk windowing/aggregation Spark:
+- Field `timestamp` sudah dalam UTC ISO 8601, cocok dipakai langsung sebagai event-time column untuk `withWatermark` / window aggregation.
+- Tidak ada `id` unik per event — jika butuh dedup, bisa kombinasikan `camera_id` + `timestamp` + `vehicle_type`.
+
+### Cara Test Konsumsi Data (PySpark snippet starter)
+
+```python
+df = (
+    spark.readStream
+    .format("kafka")
+    .option("kafka.bootstrap.servers", "kafka-lite:29092")  # dari dalam container
+    .option("subscribe", "surabaya-traffic-bikeline-violations")
+    .option("startingOffsets", "earliest")
+    .load()
+)
+```
+
+Value-nya berupa bytes JSON — perlu di-parse dengan schema sesuai field di atas menggunakan `from_json`.
+
+### Validasi yang Sudah Dilakukan
+
+1. Kafka broker berhasil start tanpa error listener.
+2. Topic berhasil dibuat dengan konfigurasi di atas.
+3. `traffic_monitor.py` (producer) berhasil konek ke `localhost:9092` dan mengirim payload setiap ada pelanggaran (log: `✅ Kafka Producer terhubung`).
+4. `consumer_test.py` berhasil menerima dan menampilkan payload JSON secara real-time dari topic yang sama.
+
+### File Terkait
+- `docker-compose.yml` — definisi service Kafka (+ skeleton service Spark)
+- `consumer_test.py` — script verifikasi consumer
