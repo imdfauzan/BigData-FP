@@ -38,7 +38,7 @@ from ultralytics import YOLO
 # LOGGING
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s [%(threadName)-30s] %(levelname)s → %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
@@ -88,7 +88,7 @@ CCTV_CONFIGS: list[dict] = [
 
 # KONFIGURASI KAFKA
 KAFKA_BOOTSTRAP_SERVERS: list[str] = ["localhost:9092"]
-KAFKA_TOPIC: str = "surabaya-traffic-bikeline-violations"
+KAFKA_TOPIC: str = "bikeline-violations"
 
 
 # KONFIGURASI DETEKSI
@@ -395,10 +395,8 @@ class TrafficMonitorThread(threading.Thread):
                         "confidence_score": round(confidence, 4),
                     }
                     self.kafka.send(payload)
-                    logger.info(
-                        "🚨 PELANGGARAN [%s] %s conf=%.2f → Kafka",
-                        self.camera_id, vehicle_type, confidence,
-                    )
+                    # Print JSON bersih ke terminal agar mudah dibaca manusia
+                    print(f"🚨 [KAFKA SEND] → {json.dumps(payload, ensure_ascii=False)}")
             else:
                 # Kotak HIJAU – kendaraan di jalur benar
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 220, 0), 2)

@@ -5,13 +5,13 @@ Analisis Real-Time Pelanggaran Jalur Bike Lane Kota Surabaya
 Fokus utama dari sistem ini adalah membangun jaringan pipeline data yang mampu mendeteksi, memproses, dan menganalisis pelanggaran lalu lintas di Jalur Sepeda (Bike Lane / Non-Motorized Transport) Kota Surabaya secara real-time.
 
 ## 4 Problem Solving
-1. Riil
+1. **Riil**
 Penyerobotan jalur sepeda dan trotoar di Surabaya (seperti di Jl. Raya Darmo atau Jl. Pemuda) banyak dikeluhkan komunitas pesepeda dan sering masuk berita lokal.
-2. Unik
+2. **Unik**
 Berbeda dengan sistem ETLE pemerintah yang sifatnya Transaksional, sistem kami sifatnya Analitis (Lakehouse), yaitu mengumpulkan pola pelanggaran.
-3. Berdampak
+3. **Berdampak**
 Menghasilkan insight berupa "Hotspot & Jam Rawan Pelanggaran" untuk menentukan di mana barier harus dipasang atau digunakan oleh Dishub untuk efisiensi patroli.
-4. Inovatif
+4. **Inovatif**
 Menggabungkan Computer Vision & YOLO di awal, Stream Processing di tengah, dan Data Lakehouse (Medallion Architecture) di akhir.
 
 ## Project Structure
