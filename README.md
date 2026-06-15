@@ -215,3 +215,26 @@ Value-nya berupa bytes JSON — perlu di-parse dengan schema sesuai field di ata
 ### File Terkait
 - `docker-compose.yml` — definisi service Kafka (+ skeleton service Spark)
 - `consumer_test.py` — script verifikasi consumer
+
+## Key Configuration References
+
+**MinIO:**
+- Endpoint: http://localhost:9001
+- Access Key: minioadmin
+- Secret Key: minioadmin123
+- Buckets: bronze, silver, gold
+
+**Kafka:**
+- Bootstrap: localhost:9092
+- Topic: surabaya-traffic-bikeline-violations
+- Partitions: 3
+
+**Spark:**
+- Master: local[4]
+- S3A Endpoint: http://minio-storage:9000
+- Delta Lake Checkpoints: s3a://lakehouse/checkpoints/
+
+**Python Environment:**
+- Location: ~/.venv/
+- Python: 3.12.3
+- Packages: kafka-python, delta-spark, pyspark

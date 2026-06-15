@@ -24,7 +24,13 @@ ENV PYTHONPATH=$SPARK_HOME/python:$PYTHONPATH
 RUN pip3 install --no-cache-dir \
     pyspark==3.5.0 \
     delta-spark==3.2.0 \
-    kafka-python
+    kafka-python \
+    boto3
+
+# Download & configure Hadoop AWS dependencies for S3A
+RUN cd $SPARK_HOME/jars && \
+    wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar && \
+    wget https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.565/aws-java-sdk-bundle-1.12.565.jar
 
 # Create working directory
 WORKDIR /opt/spark-app
