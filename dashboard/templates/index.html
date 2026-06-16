@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SITS Surabaya — Bike Lane Command Center</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"/>
+</head>
+
+<body>
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loadingOverlay">
+<div class="spinner"></div>
+<div class="loading-text">Menginisialisasi Command Center...</div>
+</div>
+<!-- TOP BAR -->
+<header id="topbar">
+<div class="logo-mark">
+<div class="logo-icon">🚦</div>
+<div>
+<div style="font-size:12px;font-weight:700;letter-spacing:0.1em">SITS SURABAYA</div>
+<div style="font-size:9px;color:var(--text-3)">BIKE LANE COMMAND CENTER</div>
+</div>
+</div>
+<div class="topbar-sep"></div>
+<div class="clock-display">
+<span>WIB</span>
+<span class="clock-live" id="clockEl">--:--:--</span>
+</div>
+<div class="status-pill live" id="streamStatus">
+<span class="pulse"></span>
+            LIVE STREAM
+        </div>
+<button id="refresh-btn" onclick="refreshData()">↺ REFRESH</button>
+</header>
+<!-- MAIN CONTENT -->
+<main class="container">
+<!-- KPI STRIP -->
+<div class="kpi-strip">
+<div class="kpi-card" style="--accent:var(--red)">
+<div class="kpi-label">Total Pelanggaran Hari Ini</div>
+<div class="kpi-value" id="kpi-total">—</div>
+<div class="kpi-sub">
+<span class="kpi-delta up" id="kpi-total-delta"></span>
+<span id="kpi-total-sub">dari seluruh CCTV aktif</span>
+</div>
+</div>
+<div class="kpi-card" style="--accent:var(--amber)">
+<div class="kpi-label">Kamera Aktif Melaporkan</div>
+<div class="kpi-value" id="kpi-cameras">—</div>
+<div class="kpi-sub">
+<span id="kpi-cameras-sub">dari 4 kamera terpasang</span>
+</div>
+</div>
+<div class="kpi-card" style="--accent:var(--cyan)">
+<div class="kpi-label">Pelanggaran Jam Ini</div>
+<div class="kpi-value" id="kpi-hourly">—</div>
+<div class="kpi-sub">
+<span class="kpi-delta" id="kpi-hourly-delta"></span>
+<span id="kpi-hourly-sub">window 5 menit terakhir</span>
+</div>
+</div>
+<div class="kpi-card" style="--accent:var(--green)">
+<div class="kpi-label">Avg Confidence YOLO</div>
+<div class="kpi-value" id="kpi-conf">—</div>
+<div class="kpi-sub">
+<span id="kpi-conf-sub">skor deteksi rata-rata</span>
+</div>
+</div>
+</div>
+<!-- CCTV FEEDS SECTION -->
+<div class="section-header">
+<span class="section-eyebrow">LIVE</span>
+<span class="section-title">CCTV Monitor — 4 Titik Pantau Aktif</span>
+<span class="section-line"></span>
+<span style="font-family:var(--mono);font-size:9px;color:var(--text-3)">AUTO-REFRESH 5s</span>
+</div>
+<div class="cctv-grid" id="cctvGrid">
+<!-- Filled by JS -->
+</div>
+<!-- CHARTS ROW -->
+<div class="section-header">
+<span class="section-eyebrow">ANALYTICS</span>
+<span class="section-title">Tren &amp; Distribusi Pelanggaran</span>
+<span class="section-line"></span>
+</div>
+<div class="chart-grid">
+<!-- HOURLY TREND (wide) -->
+<div class="chart-card wide">
+<div class="chart-header">
+<span class="chart-title">Tren Pelanggaran per Jam (Hari Ini)</span>
+<span class="chart-meta" id="hourlyUpdated"></span>
+</div>
+<div class="chart-body" style="height:200px">
+<canvas id="hourlyChart"></canvas>
+</div>
+</div>
+<!-- VEHICLE PIE -->
+<div class="chart-card">
+<div class="chart-header">
+<span class="chart-title">Distribusi Jenis Kendaraan</span>
+</div>
+<div class="chart-body" style="height:200px">
+<canvas id="vehicleChart"></canvas>
+</div>
+</div>
+<!-- CAMERA BAR -->
+<div class="chart-card wide">
+<div class="chart-header">
+<span class="chart-title">Pelanggaran per Lokasi CCTV</span>
+<span class="chart-meta">7 hari terakhir</span>
+</div>
+<div class="chart-body" style="height:200px">
+<canvas id="cameraChart"></canvas>
+</div>
+</div>
+<!-- PEAK HOURS -->
+<div class="chart-card">
+<div class="chart-header">
+<span class="chart-title">Jam Rawan Pelanggaran</span>
+<span class="chart-meta">heatmap 24h</span>
+</div>
+<div class="chart-body" style="height:200px">
+<canvas id="peakChart"></canvas>
+</div>
+</div>
+<!-- CONFIDENCE TREND -->
+<div class="chart-card full">
+<div class="tab-row">
+<button class="tab-btn active" onclick="switchTab('conf',this,'confidence')">Confidence Score
+                        Trend</button>
+<button class="tab-btn" onclick="switchTab('conf',this,'daily')">Daily Trend (30 Hari)</button>
+</div>
+<div class="tab-content active" id="conf-confidence" style="height:180px">
+<canvas id="confChart"></canvas>
+</div>
+<div class="tab-content" id="conf-daily" style="height:180px">
+<canvas id="dailyChart"></canvas>
+</div>
+</div>
+</div>
+<!-- REAL-TIME FEED + VEHICLE BREAKDOWN -->
+<div class="section-header">
+<span class="section-eyebrow">FEED</span>
+<span class="section-title">Log Pelanggaran Real-Time</span>
+<span class="section-line"></span>
+<span id="feedCount" style="font-family:var(--mono);font-size:9px;color:var(--text-3)"></span>
+</div>
+<div class="feed-grid">
+<!-- LIVE LOG TABLE -->
+<div class="feed-card">
+<div class="chart-header">
+<span class="chart-title">EVENT LOG</span>
+<span class="chart-meta">streaming kafka consumer</span>
+</div>
+<div class="feed-body" id="feedBody">
+<div class="no-data">Menunggu data dari Kafka stream...</div>
+</div>
+</div>
+<!-- VEHICLE BREAKDOWN per CAMERA -->
+<div class="feed-card">
+<div class="chart-header">
+<span class="chart-title">Breakdown Kendaraan per Kamera</span>
+<span class="chart-meta">hari ini</span>
+</div>
+<div class="chart-body" style="height:240px">
+<canvas id="vehicleCameraChart"></canvas>
+</div>
+</div>
+</div>
+<!-- HOTSPOT TABLE -->
+<div class="section-header">
+<span class="section-eyebrow">HOTSPOT</span>
+<span class="section-title">Ranking Lokasi Paling Rawan</span>
+<span class="section-line"></span>
+</div>
+<div class="hotspot-card">
+<table class="hotspot-table" id="hotspotTable">
+<thead>
+<tr>
+<th>#</th>
+<th>CAMERA ID</th>
+<th>LOKASI</th>
+<th>TOTAL PELANGGARAN</th>
+<th>DISTRIBUSI</th>
+<th>KENDARAAN TERBANYAK</th>
+<th>AVG CONFIDENCE</th>
+<th>STATUS</th>
+</tr>
+</thead>
+<tbody id="hotspotBody">
+<tr>
+<td class="no-data" colspan="8">Memuat data...</td>
+</tr>
+</tbody>
+</table>
+</div>
+</main>
+<footer>
+<span>Final Project Big Data 2026 · Institut Teknologi Sepuluh Nopember</span>
+<span>Analisis Real-Time Pelanggaran Jalur Bike Lane Kota Surabaya</span>
+<span>Data Serving Layer · Orang 5</span>
+</footer>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script></body>
+</html>

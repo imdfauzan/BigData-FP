@@ -137,6 +137,21 @@ Contoh Output:
     - Hotspot (titik lokasi) CCTV dengan tingkat pelanggaran tertinggi di Surabaya.
     - Tren jam dan hari rawan penyerobotan jalur sepeda.
     - Proporsi jenis kendaraan yang paling sering melanggar (motor vs mobil vs lainnya).
+
+## Menjalankan Dashboard Real-Time (Flask)
+Dashboard ini berfungsi untuk menampilkan analitik dan live-feed CCTV secara real-time.
+Untuk menjalankannya:
+1. Pastikan `traffic_monitor.py` sedang berjalan di terminal terpisah. (Ini diperlukan untuk mengirimkan log analitik ke Kafka dan menyediakan live video stream di port 5001).
+2. Buka terminal baru dan masuk ke direktori dashboard:
+   ```bash
+   cd dashboard
+   ```
+3. Install package Flask jika belum: `pip install Flask`
+4. Jalankan server dashboard:
+   ```bash
+   python dashboard.py
+   ```
+5. Buka browser dan akses: `http://localhost:5000`
 ---
 
 ## Kafka Setup & Handoff (Orang 2 → Orang 3)

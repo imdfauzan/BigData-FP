@@ -21,6 +21,7 @@ Untuk testing tanpa stream langsung, ganti `url` dengan path video lokal:
 =============================================================================
 """
 
+import os
 import cv2
 import json
 import logging
@@ -33,6 +34,41 @@ import numpy as np
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 from ultralytics import YOLO
+
+# Gunakan protokol TCP untuk RTSP untuk menghindari packet loss (mengatasi error RTP timestamps / dropped frames)
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+
+from flask import Flask, Response
+
+stream_app = Flask(__name__)
+LATEST_FRAMES = {}
+frames_lock = threading.Lock()
+
+def generate_mjpeg(camera_id):
+    while True:
+        with frames_lock:
+            frame = LATEST_FRAMES.get(camera_id)
+        if frame is None:
+            time.sleep(0.1)
+            continue
+        ret, buffer = cv2.imencode('.jpg', frame)
+        if not ret:
+            time.sleep(0.1)
+            continue
+        frame_bytes = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(0.1)
+
+@stream_app.route('/video_feed/<camera_id>')
+def video_feed(camera_id):
+    return Response(generate_mjpeg(camera_id), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+def start_stream_server():
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    stream_app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
+
 
 
 # LOGGING
@@ -415,6 +451,9 @@ class TrafficMonitorThread(threading.Thread):
             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2,
         )
 
+        with frames_lock:
+            LATEST_FRAMES[self.camera_id] = frame.copy()
+
         return frame, violation_count
 
     # Stream Management
@@ -505,6 +544,9 @@ def main() -> None:
     logger.info("  Kafka topic         : %s", KAFKA_TOPIC)
     logger.info("  CLAHE preprocessing : %s", "ON" if ENABLE_CLAHE else "OFF")
     logger.info(sep)
+
+    threading.Thread(target=start_stream_server, daemon=True).start()
+    logger.info("✅ MJPEG Stream Server berjalan di http://localhost:5001")
 
     kafka_manager = KafkaProducerManager()
     threads: list[TrafficMonitorThread] = []
