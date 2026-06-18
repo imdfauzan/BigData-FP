@@ -87,7 +87,8 @@
             <!-- HOURLY TREND (full) -->
             <div class="chart-card full">
                 <div class="tab-row">
-                    <button class="tab-btn active" onclick="switchTrendTab('semua', this)">Grafik Tren Pelanggaran (4 Lokasi)</button>
+                    <button class="tab-btn active" onclick="switchTrendTab('semua', this)">Grafik Tren Pelanggaran (4
+                        Lokasi)</button>
                     <button class="tab-btn" onclick="switchTrendTab('CCTV_BASUKI_RAHMAT', this)">BASUKI RAHMAT</button>
                     <button class="tab-btn" onclick="switchTrendTab('CCTV_BAMBU_RUNCING', this)">BAMBU RUNCING</button>
                     <button class="tab-btn" onclick="switchTrendTab('CCTV_BASRA_LOOP', this)">BASRA LOOP</button>
@@ -110,7 +111,7 @@
             <div class="chart-card wide">
                 <div class="chart-header">
                     <span class="chart-title">Pelanggaran per Lokasi CCTV</span>
-                    <span class="chart-meta">7 hari terakhir</span>
+
                 </div>
                 <div class="chart-body" style="height:200px">
                     <canvas id="cameraChart"></canvas>
@@ -126,63 +127,18 @@
                     <canvas id="peakChart"></canvas>
                 </div>
             </div>
-        </div>
-        <!-- REAL-TIME FEED + VEHICLE BREAKDOWN -->
-        <div class="section-header">
-            <span class="section-eyebrow">FEED</span>
-            <span class="section-title">Log Pelanggaran Real-Time</span>
-            <span class="section-line"></span>
-            <span id="feedCount" style="font-family:var(--mono);font-size:9px;color:var(--text-3)"></span>
-        </div>
-        <div class="feed-grid">
-            <!-- LIVE LOG TABLE -->
-            <div class="feed-card">
+            <!-- EVENT LOG -->
+            <div class="feed-card chart-card wide">
                 <div class="chart-header">
                     <span class="chart-title">EVENT LOG</span>
                     <span class="chart-meta">streaming kafka consumer</span>
                 </div>
-                <div class="feed-body" id="feedBody">
+                <div class="feed-body" id="feedBody" style="height:200px; max-height:200px;">
                     <div class="no-data">Menunggu data dari Kafka stream...</div>
                 </div>
             </div>
-            <!-- VEHICLE BREAKDOWN per CAMERA -->
-            <div class="feed-card">
-                <div class="chart-header">
-                    <span class="chart-title">Breakdown Kendaraan per Kamera</span>
-                    <span class="chart-meta">hari ini</span>
-                </div>
-                <div class="chart-body" style="height:240px">
-                    <canvas id="vehicleCameraChart"></canvas>
-                </div>
-            </div>
         </div>
-        <!-- HOTSPOT TABLE -->
-        <div class="section-header">
-            <span class="section-eyebrow">HOTSPOT</span>
-            <span class="section-title">Ranking Lokasi Paling Rawan</span>
-            <span class="section-line"></span>
-        </div>
-        <div class="hotspot-card">
-            <table class="hotspot-table" id="hotspotTable">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>CAMERA ID</th>
-                        <th>LOKASI</th>
-                        <th>TOTAL PELANGGARAN</th>
-                        <th>DISTRIBUSI</th>
-                        <th>KENDARAAN TERBANYAK</th>
-                        <th>AVG CONFIDENCE</th>
-                        <th>STATUS</th>
-                    </tr>
-                </thead>
-                <tbody id="hotspotBody">
-                    <tr>
-                        <td class="no-data" colspan="8">Memuat data...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+
     </main>
     <footer>
         <span>Final Project Big Data 2026 · Institut Teknologi Sepuluh Nopember</span>

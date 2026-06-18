@@ -11,6 +11,8 @@ let activeTrendTab = 'semua';
 let trendMaxPoints = 19;
 let trendLabels = [];
 let trendData = { semua: [], CCTV_BASUKI_RAHMAT: [], CCTV_BAMBU_RUNCING: [], CCTV_BASRA_LOOP: [], CCTV_DARMO_MERCURE: [] };
+let peakData = Array.from({ length: 24 }, (_, i) => ({ hour: i, total: 0 }));
+let liveEvents = [];
 
 function initTrendChartData() {
     let now = new Date();
@@ -35,12 +37,12 @@ function shiftTrendChartIfNeeded() {
         let dNow = new Date();
         dNow.setSeconds(0);
         dNow.setMilliseconds(0);
-        
+
         let lastTimeStr = trendLabels[trendLabels.length - 1];
         let [l_hh, l_mm] = lastTimeStr.split('.');
         let dLast = new Date();
         dLast.setHours(parseInt(l_hh, 10), parseInt(l_mm, 10), 0, 0);
-        
+
         if (dNow < dLast && dLast.getHours() === 23 && dNow.getHours() === 0) {
             dNow.setDate(dNow.getDate() + 1);
         }
@@ -50,7 +52,7 @@ function shiftTrendChartIfNeeded() {
             for (let i = 0; i < diffMins; i++) {
                 trendLabels.shift();
                 Object.values(trendData).forEach(arr => arr.shift());
-                
+
                 dLast.setTime(dLast.getTime() + 60000);
                 let n_hh = String(dLast.getHours()).padStart(2, '0');
                 let n_mm = String(dLast.getMinutes()).padStart(2, '0');
@@ -89,7 +91,7 @@ eventSource.onmessage = function (event) {
     totalViolations++;
     minuteViolations++;
     activeCameras.add(payload.camera_id);
-    
+
     if (typeof payload.confidence_score === "number") {
         totalConfidence += payload.confidence_score;
         confidenceCount++;
@@ -100,7 +102,7 @@ eventSource.onmessage = function (event) {
     document.getElementById("kpi-total").innerText = totalViolations;
     document.getElementById("kpi-cameras").innerText = `${activeCameras.size}/4`;
     document.getElementById("kpi-minute").innerText = minuteViolations;
-    
+
     shiftTrendChartIfNeeded();
     let now = new Date();
     let hh = String(now.getHours()).padStart(2, '0');
@@ -115,6 +117,21 @@ eventSource.onmessage = function (event) {
         if (typeof hourlyChart !== 'undefined' && hourlyChart !== null) {
             hourlyChart.update();
         }
+    }
+
+    let currentHour = now.getHours();
+    peakData[currentHour].total++;
+    if (charts.peak) {
+        charts.peak.data.datasets[0].data = peakData.map(p => p.total);
+        const maxVal = Math.max(...peakData.map(p => p.total), 1);
+        const colors = peakData.map(p => {
+            const ratio = p.total / maxVal;
+            if (ratio > 0.8) return 'rgba(248,113,113,0.85)';
+            if (ratio > 0.5) return 'rgba(251,191,36,0.75)';
+            return 'rgba(56,189,248,0.45)';
+        });
+        charts.peak.data.datasets[0].backgroundColor = colors;
+        charts.peak.update();
     }
 
     if (payload.vehicle_type === 'motorcycle') vehicleDist.motorcycle++;
@@ -132,6 +149,13 @@ eventSource.onmessage = function (event) {
     if (charts.camera) {
         charts.camera.data.datasets[0].data = CAMERAS.map(c => cameraDist[c.id] || 0);
         charts.camera.update();
+    }
+
+    if (payload.timestamp) {
+        payload.timestamp = new Date(payload.timestamp);
+        liveEvents.unshift(payload);
+        if (liveEvents.length > 20) liveEvents.pop();
+        renderFeed(liveEvents);
     }
 };
 
@@ -442,11 +466,25 @@ function buildCameraChart(cameraStats) {
     });
 }
 
-function buildPeakChart(peaks) {
+function buildPeakChart() {
+    if (charts.peak) {
+        charts.peak.data.datasets[0].data = peakData.map(p => p.total);
+        const maxVal = Math.max(...peakData.map(p => p.total), 1);
+        const colors = peakData.map(p => {
+            const ratio = p.total / maxVal;
+            if (ratio > 0.8) return 'rgba(248,113,113,0.85)';
+            if (ratio > 0.5) return 'rgba(251,191,36,0.75)';
+            return 'rgba(56,189,248,0.45)';
+        });
+        charts.peak.data.datasets[0].backgroundColor = colors;
+        charts.peak.update();
+        return;
+    }
+
     destroyChart('peak');
     const ctx = document.getElementById('peakChart').getContext('2d');
-    const maxVal = Math.max(...peaks.map(p => p.total));
-    const colors = peaks.map(p => {
+    const maxVal = Math.max(...peakData.map(p => p.total), 1);
+    const colors = peakData.map(p => {
         const ratio = p.total / maxVal;
         if (ratio > 0.8) return 'rgba(248,113,113,0.85)';
         if (ratio > 0.5) return 'rgba(251,191,36,0.75)';
@@ -455,8 +493,8 @@ function buildPeakChart(peaks) {
     charts.peak = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: peaks.map(p => String(p.hour).padStart(2, '0')),
-            datasets: [{ data: peaks.map(p => p.total), backgroundColor: colors, borderWidth: 0, borderRadius: 2 }]
+            labels: peakData.map(p => String(p.hour).padStart(2, '0')),
+            datasets: [{ data: peakData.map(p => p.total), backgroundColor: colors, borderWidth: 0, borderRadius: 2 }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
@@ -476,29 +514,7 @@ function buildPeakChart(peaks) {
 }
 
 function buildVehicleCameraChart(cameraStats) {
-    destroyChart('vehicleCamera');
-    const ctx = document.getElementById('vehicleCameraChart').getContext('2d');
-    const vtColors = { motorcycle: 'rgba(56,189,248,0.8)', car: 'rgba(248,113,113,0.8)', bus: 'rgba(251,191,36,0.8)', truck: 'rgba(167,139,250,0.8)' };
-    const datasets = VEHICLE_TYPES.map(vt => ({
-        label: VEHICLE_ICONS[vt] + ' ' + vt,
-        data: cameraStats.map(c => c.vehicle_dist[vt] || 0),
-        backgroundColor: vtColors[vt], borderRadius: 2, borderWidth: 0,
-    }));
-    charts.vehicleCamera = new Chart(ctx, {
-        type: 'bar',
-        data: { labels: cameraStats.map(c => c.short), datasets },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: '#7ea8cc', font: { family: 'JetBrains Mono,monospace', size: 9 }, boxWidth: 10 } },
-                tooltip: { backgroundColor: 'rgba(13,21,38,0.95)', borderColor: 'rgba(56,189,248,0.3)', borderWidth: 1, titleColor: '#38bdf8', bodyColor: '#e2f0ff' }
-            },
-            scales: {
-                x: { stacked: true, grid: { display: false }, ticks: { color: '#7ea8cc', font: { family: 'JetBrains Mono,monospace', size: 9 } } },
-                y: { stacked: true, grid: { color: 'rgba(56,189,248,0.06)' }, ticks: { color: '#4a7399', font: { family: 'JetBrains Mono,monospace', size: 9 } }, beginAtZero: true }
-            }
-        }
-    });
+    // Removed
 }
 
 // ============================================================
@@ -536,20 +552,7 @@ function renderCCTV(cameraStats) {
           <span class="hud-count">${isAlert ? '⚠' : ''} ${stat.hourly_now} DETEKSI/JAM</span>
         </div>
       </div>
-      <div class="cctv-stats">
-        <div class="stat-mini">
-          <div class="stat-mini-val" style="color:var(--red)">${stat.total.toLocaleString()}</div>
-          <div class="stat-mini-lbl">Total Hari Ini</div>
-        </div>
-        <div class="stat-mini">
-          <div class="stat-mini-val" style="color:var(--amber)">${stat.hourly_now}</div>
-          <div class="stat-mini-lbl">Jam Ini</div>
-        </div>
-        <div class="stat-mini">
-          <div class="stat-mini-val" style="color:var(--cyan)">${stat.avg_conf.toFixed(2)}</div>
-          <div class="stat-mini-lbl">Avg Conf</div>
-        </div>
-      </div>
+      
     `;
         grid.appendChild(card);
     });
@@ -566,10 +569,10 @@ function renderKPIs(cameraStats) {
 
     // Kpi-cameras diupdate langsung dari Kafka stream
     // document.getElementById('kpi-cameras').textContent = `${camActive}/4`;
-    
+
     // Kpi-minute diupdate langsung dari Kafka stream
     // document.getElementById('kpi-hourly').textContent = hourlyNow;
-    
+
     // Kpi-conf diupdate langsung dari Kafka stream
     // document.getElementById('kpi-conf').textContent = (avgConf * 100).toFixed(1) + '%';
 
@@ -582,21 +585,22 @@ function renderKPIs(cameraStats) {
 
 function renderFeed(events) {
     const body = document.getElementById('feedBody');
+    if (!body) return;
     body.innerHTML = '';
-    document.getElementById('feedCount').textContent = `${events.length} EVENT TERAKHIR`;
 
     events.slice(0, 20).forEach(ev => {
         const row = document.createElement('div');
         row.className = 'feed-row';
         const ts = ev.timestamp;
-        const timeStr = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}:${String(ts.getSeconds()).padStart(2, '0')}`;
-        const confPct = Math.round(ev.confidence_score * 100);
+        const timeStr = ts ? `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}:${String(ts.getSeconds()).padStart(2, '0')}` : '--:--:--';
+        const confPct = Math.round(ev.confidence_score * 100) || 0;
+
         row.innerHTML = `
       <span class="feed-time">${timeStr}</span>
-      <span class="feed-cam">${ev.camera_id.replace('CCTV_', '')}</span>
+      <span class="feed-cam">${ev.location || (ev.camera_id ? ev.camera_id.replace('CCTV_', '') : '')}</span>
       <div class="feed-vtype">
-        <span class="vtype-icon">${VEHICLE_ICONS[ev.vehicle_type]}</span>
-        <span class="vtype-label">${ev.vehicle_type}</span>
+        <span class="vtype-icon">${VEHICLE_ICONS[ev.vehicle_type] || '❓'}</span>
+        <span class="vtype-label">${ev.vehicle_type || 'Unknown'}</span>
       </div>
       <div>
         <div class="conf-val">${confPct}%</div>
@@ -664,44 +668,14 @@ function switchTrendTab(tabId, btn) {
 function refreshData() {
     const cameraStats = generateCameraStats();
     const hourlyData = generateHourlyData();
-    const peakHours = generatePeakHours();
-    const events = generateRecentEvents(30);
 
     renderKPIs(cameraStats);
     renderCCTV(cameraStats);
-    renderFeed(events);
-    renderHotspot(cameraStats);
+    // buildPredictionChart(cameraStats); // function is not defined yet, causing a ReferenceError that stops execution
     buildHourlyChart(hourlyData);
     buildVehicleChart(cameraStats);
     buildCameraChart(cameraStats);
-    buildPeakChart(peakHours);
-    buildVehicleCameraChart(cameraStats);
-}
-
-// ============================================================
-// LIVE FEED SIMULATION (new event every ~5s)
-// ============================================================
-let liveEvents = generateRecentEvents(30);
-
-function addLiveEvent() {
-    const cam = CAMERAS[Math.floor(rng() * CAMERAS.length)];
-    const profile = CAMERA_PROFILES[cam.id];
-    const vtype = pickVehicle(profile.vehicle_bias);
-    const conf = parseFloat((0.15 + rng() * 0.75).toFixed(4));
-    const newEvent = { camera_id: cam.id, location: cam.location, timestamp: new Date(), vehicle_type: vtype, confidence_score: conf };
-    liveEvents.unshift(newEvent);
-    if (liveEvents.length > 50) liveEvents.pop();
-    renderFeed(liveEvents);
-
-    // Update KPI hourly counter slightly
-    const kpiEl = document.getElementById('kpi-hourly');
-    const cur = parseInt(kpiEl.textContent) || 0;
-    kpiEl.textContent = cur + 1;
-
-    // Flash the camera badge
-    const alertStatus = document.getElementById('streamStatus');
-    alertStatus.classList.add('warn');
-    setTimeout(() => alertStatus.classList.remove('warn'), 600);
+    buildPeakChart();
 }
 
 // ============================================================
@@ -711,16 +685,7 @@ window.addEventListener('load', () => {
     setTimeout(() => {
         document.getElementById('loadingOverlay').style.display = 'none';
         refreshData();
-        // Auto-refresh every 30s
+        // Auto-refresh every 5s
         setInterval(refreshData, 5000);
-        // Live event every 4-8s
-        const scheduleEvent = () => {
-            const delay = 4000 + Math.random() * 4000;
-            setTimeout(() => { addLiveEvent(); scheduleEvent(); }, delay);
-        };
-        scheduleEvent();
     }, 1200);
 });
-
-
-
