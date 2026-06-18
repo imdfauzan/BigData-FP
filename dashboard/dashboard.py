@@ -11,8 +11,7 @@ app = Flask(__name__)
 
 # Konfigurasi Kafka
 KAFKA_BOOTSTRAP_SERVERS = ["localhost:9092"]
-# Topic ini sesuai dengan yang ada di README dan consumer_test.py
-KAFKA_TOPIC = "surabaya-traffic-bikeline-violations"
+KAFKA_TOPIC = "bikeline-violations"
 
 # Buffer sederhana untuk menyimpan 50 event terakhir di memori agar ketika 
 # dashboard baru dibuka, tidak kosong.
