@@ -1,6 +1,8 @@
 # Final Project Big Data 2026
 Analisis Real-Time Pelanggaran Jalur Bike Lane Kota Surabaya
 
+![dashboard](https://raw.githubusercontent.com/imdfauzan/BigData-FP/refs/heads/main/resources/final-dashboard.jpeg)
+
 ## Anggota Kelompok 6
 |Nama|NRP|
 |---|---|
@@ -22,6 +24,35 @@ Sebagai upaya mendorong transportasi ramah lingkungan dan meningkatkan keselamat
 
 ## Deskripsi Proyek 
 Fokus utama dari sistem ini adalah membangun jaringan pipeline data yang mampu mendeteksi, memproses, dan menganalisis pelanggaran lalu lintas di Jalur Sepeda (Bike Lane / Non-Motorized Transport) Kota Surabaya secara real-time.
+
+### Tech Stack
+
+Sistem ini menggunakan kombinasi teknologi *Computer Vision*, *Stream Processing*, *Data Lakehouse*, dan *Real-Time Web Dashboard* dengan rincian:
+
+* **Data Ingestion & Computer Vision:**
+    * **Python 3.12.3** — Bahasa pemrograman utama untuk seluruh pipeline sistem.
+    * **OpenCV** — Ekstraksi frame video, pre-processing gambar, dan analisis spasial (ROI via `cv2.pointPolygonTest`).
+    * **Ultralytics YOLOv8 (Medium Variant)** — Model *object detection* untuk klasifikasi jenis kendaraan secara *real-time*.
+    * **Streamlink** — Library untuk menangani penyerapan *live stream video* dari protokol HLS (.m3u8) atau RTSP CCTV SITS Surabaya.
+
+* **Stream Transport & Buffering (Message Broker):**
+    * **Apache Kafka** — Platform *streaming event* terdistribusi dengan konfigurasi 3 partisi log sebagai penahan beban (*buffering*) untuk mencegah *data loss*.
+    * **Kafka-Python** — Driver integrasi untuk mengirimkan *metadata payload* JSON dari *Edge Ingestion* ke Kafka Broker.
+
+* **Stream Processing Engine:**
+    * **Apache Spark Structured Streaming (PySpark)** — *Engine* pemrosesan data *in-memory* berskala besar untuk *schema enforcement*, *data cleaning*, penanganan data telat (*watermarking*), dan perhitungan agregasi bergerak (*windowing*).
+
+* **Storage & Data Lakehouse:**
+    * **Delta Lake** — Penyimpanan transaksional ACID yang menerapkan *Medallion Architecture* (Bronze → Silver → Gold) dan *Schema Enforcement*.
+    * **MinIO** — *High-performance object storage* yang S3-*compatible* sebagai infrastruktur dasar penyimpanan *Data Lakehouse*.
+
+* **Data Serving & Visualization:**
+    * **Flask Web Server** — *Backend framework* ringan untuk melayani *query* SQL cepat ke Gold Layer dan menyalurkan data via *Server-Sent Events* (SSE).
+    * **Chart.js** — *Library* JavaScript untuk merender grafik interaktif dan log pelanggaran secara *real-time* di sisi *frontend* browser.
+    * **Apache Superset** — *Platform* BI/Analitik eksploratif untuk visualisasi data historis, *heatmap* jam rawan, dan analisis *Bike Lane Violation Index* (BLVI).
+
+* **Infrastructure & Deployment Environment:**
+    * **Docker & Docker Compose** — Kontainerisasi untuk menyusun, mengisolasi, dan menjalankan *services* (Kafka, MinIO, Spark cluster) secara konsisten.
 
 ## Desain Infrastruktur dan Flow Pipeline
 
