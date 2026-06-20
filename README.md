@@ -15,10 +15,70 @@ Kota Surabaya memiliki tingkat mobilitas yang tinggi seiring dengan meningkatnya
 
 Sebagai upaya mendorong transportasi ramah lingkungan dan meningkatkan keselamatan pesepeda, Pemkot Surabaya telah menyediakan jalur sepeda di beberapa ruas jalan. Namun, pelanggaran berupa kendaraan yang menggunakan jalur sepeda sering ditemukan. Kondisi tersebut dapat mengurangi keamanan pesepeda serta menurunkan efektivitas fungsi jalur sepeda. Oleh karena itu, diperlukan sistem pemantauan yang mendeteksi pelanggaran penyerobotan jalur sepeda secara real-time.
 
+>Sumber:
+> 1. [1.488 Kecelakaan Terjadi di Jalanan Surabaya Selama 2024](https://www.jawapos.com/surabaya-raya/2501010263/1488-kecelakaan-terjadi-di-jalanan-surabaya-selama-2024-salah-satunya-gara-gara-pengemudi-mabuk)
+> 2. [51 Orang Tewas dalam Laka Lantas di Surabaya selama 2024](https://jatim.idntimes.com/news/jawa-timur/51-orang-tewas-dalam-laka-lantas-di-surabaya-selama-2024-00-w15v1-tr21kf/amp)
+> 3. [DP3APPKB Surabaya](https://dp3appkb.surabaya.go.id/)
+
 ## Deskripsi Proyek 
 Fokus utama dari sistem ini adalah membangun jaringan pipeline data yang mampu mendeteksi, memproses, dan menganalisis pelanggaran lalu lintas di Jalur Sepeda (Bike Lane / Non-Motorized Transport) Kota Surabaya secara real-time.
 
 ## Desain Infrastruktur dan Flow Pipeline
+
+```mermaid
+graph TD
+    %% Definisi Style & Warna
+    classDef hulu fill:#ffcccb,stroke:#333,stroke-width:2px,color:#000;
+    classDef tengah fill:#ffe5b4,stroke:#333,stroke-width:2px,color:#000;
+    classDef hilir fill:#d1e7dd,stroke:#333,stroke-width:2px,color:#000;
+    classDef serving fill:#cff4fc,stroke:#333,stroke-width:2px,color:#000;
+
+    %% LAYER 1: DATA INGESTION (HULU)
+    subgraph INGESTION_LAYER ["1. Data Ingestion Layer"]
+        A[SITS Live CCTV Stream<br/>HLS .m3u8 / RTSP] -->|Frame Extraction| B(OpenCV Multi-Threading Workers)
+        B --> C[YOLOv8 Medium Inference<br/>Vehicle Detection]
+        C --> D{Spatial Filter:<br/>cv2.pointPolygonTest}
+        D -->|Roda di Luar Bike Lane| E[Abaikan Frame]
+        D -->|Roda di Dalam Bike Lane| F{Temporal Filter:<br/>Persistence & Cooldown 2s}
+        F -->|Hanya Melewati sekilas| E
+        F -->|Kendaraan mau belok, memotong jalur sepeda| E
+        F -->|Sah Melanggar| G[Create Metadata JSON Payload]
+    end
+    
+    %% LAYER 2: STREAMING TRANSPORT (TENGAH)
+    subgraph STREAMING_LAYER ["2. Streaming Layer (Message Broker)"]
+        G -->|Publish / Produce Event| H[Apache Kafka Broker<br/>Topic: bikeline-violations]
+        H -->|Partition 1 / 2 / 3<br/>Load Balancer| I(Kafka Log Cluster)
+    end
+
+    %% LAYER 3: PROCESSING & STORAGE (HILIR)
+    subgraph STORAGE_LAYER ["3. Processing & Storage Layer (Data Lakehouse)"]
+        I -->|Consume Micro-Batch / In-Memory| J(Apache Spark Structured Streaming)
+        
+        %% Medallion Architecture
+        subgraph MEDALLION_ARCH ["Medallion Architecture (MinIO Object Storage + Delta Lake)"]
+            K[Bronze Layer<br/>Raw JSON Log Archive] -->|Data Cleaning & Validation| L[Silver Layer<br/>Enriched Cleaned Data + BLVI Calculation]
+            L -->|Windowed Aggregation 5m| M[Gold Layer<br/>Aggregated Summary Tables]
+        end
+        
+        J -->|Write Transactional ACID| K
+        J -.->|Transform & Enforce Schema| L
+        J -.->|Compute Metrics| M
+    end
+
+    %% LAYER 4: DATA SERVING
+    subgraph SERVING_LAYER ["4. Data Serving Layer (Visualisasi)"]
+        N[Flask Web Server<br/>dashboard.py] -->|Periodic SQL Query| M
+        N -->|Server-Sent Events / SSE| O[Frontend Browser<br/>index.html]
+        O -->|Render Graphs & Logs| P[Chart.js Interaktif UI]
+    end
+
+    %% Penerapan Class Style
+    class A,B,C,D,E,F,G hulu;
+    class H,I tengah;
+    class J,K,L,M hilir;
+    class N,O,P serving;
+```
 
 ```
 [ INGESTION LAYER ]              [ STREAMING LAYER ]            [ STORAGE LAYER ]           [ SERVING LAYER ]
@@ -322,6 +382,7 @@ Value-nya berupa bytes JSON — perlu di-parse dengan schema sesuai field di ata
 - Python: 3.12.3
 - Packages: kafka-python, delta-spark, pyspark
 
+---
 
 ## Kriteria Berdasarkan Rubrik Penilaian
 ### Latar Belakang
@@ -448,8 +509,3 @@ Sederhananya:
 
 **Precision Pelanggaran** = TP / (TP + FP)
 **Recall Pelanggaran**    = TP / (TP + FN)
-
-## Sumber
-1. [1.488 Kecelakaan Terjadi di Jalanan Surabaya Selama 2024](https://www.jawapos.com/surabaya-raya/2501010263/1488-kecelakaan-terjadi-di-jalanan-surabaya-selama-2024-salah-satunya-gara-gara-pengemudi-mabuk)
-2. [51 Orang Tewas dalam Laka Lantas di Surabaya selama 2024](https://jatim.idntimes.com/news/jawa-timur/51-orang-tewas-dalam-laka-lantas-di-surabaya-selama-2024-00-w15v1-tr21kf/amp)
-3. [DP3APPKB Surabaya](https://dp3appkb.surabaya.go.id/)
