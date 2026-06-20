@@ -133,11 +133,12 @@ Menggabungkan Computer Vision & YOLO di awal, Stream Processing di tengah, dan D
 BigData-FP/
 ├── CCTV-YOLO.ipynb                 # config cctv, ubah ROI
 ├── cctv_polygon_configs.json       # hasil json config polygon ROI
+├── consumer_test.py                # script verifikasi consumer
 ├── dashboard/                      # dashboard & live-feed
     ├── templates/
     ├── static/
     ├── dashboard.py                # start dashboard
-├── docker-compose.yml              # kafka & minio
+├── docker-compose.yml              # definisi service Kafka (+ skeleton service Spark)
 ├── requirements.txt
 ├── traffic_monitor.py              # menjalankan sistem cctv, YOLO, mengirim data ke kafka
 └── snapshots/                      # temporary foto untuk melakukan ROI
@@ -148,16 +149,17 @@ BigData-FP/
 ```
 
 ## Cara Menjalankan
-1. Run Live CCTV (Analysis & Ingestion)
+1. Run Live CCTV (Analysis & Ingestion) - **Terminal 1**
     - Buat .venv jika belum `python -m venv .venv`
     - Masuk .venv `.\.venv\Scripts\Activate`
-    - Install Dependencies `pip install opencv-python ultralytics kafka-python numpy streamlink`
+    - Install Dependencies `pip install opencv-python ultralytics kafka-python numpy streamlink flask`
     ```python
+    # jalankan sistem
     python traffic_monitor.py
     ```
     - Akan menghasilkan teks JSON yang siap masuk ke Kafka
 
-2. Run Stream Processing (Kafka & Spark)
+2. Run Stream Processing (Kafka & Spark) - **Terminal 2**
     - Jalankan Kafka broker:
       ```bash
       docker compose up -d
@@ -169,26 +171,14 @@ BigData-FP/
         --bootstrap-server localhost:9092 \
         --partitions 3 --replication-factor 1 --config retention.ms=7200000
       ```
-    - Spark Structured Streaming: [ON PROGRESS - Orang 3]
-
-## Arsitektur Sistem & Flow Pipeline
-Sistem ini dirancang agar dapat memisahkan beban kerja berat (AI Inference) dengan beban kerja pemrosesan data (Stream Processing) di sisi tengah.
-```
-[ INGESTION LAYER ]              [ STREAMING LAYER ]            [ STORAGE LAYER ]           [ SERVING LAYER ]
- ┌────────────────┐               ┌────────────────┐             ┌───────────────┐           ┌──────────────┐
- │  CCTV Stream   │               │                │             │  Delta Lake   │           │              │
- │  (HLS / RTSP)  │               │  Apache Kafka  │             │   on MinIO    │           │ Flask Stream │
- └───────┬────────┘               │(Message Broker)│             │  (Lakehouse)  │           │  Dashboard   │
-         │                        └───────▲────────┘             └───────▲───────┘           └───────▲──────┘
-         ▼ (OpenCV Frame Read)            │                              │                           │
- ┌────────────────┐                       │ (Publish JSON)               │ (Write Structured)        │ (SQL Query)
- │ YOLOv8 Medium  │───────────────────────┘                              │                           │
- │+ Spatial Filter│                                                      │                           │
- └────────────────┘                                              ┌───────┴───────┐                   │
-                                                                 │ Apache Spark  │───────────────────┘
-                                                                 │ (Streaming)   │
-                                                                 └───────────────┘
-```
+3. Jalankan server Dashboard - **Terminal 3**
+    - Buat .venv jika belum `python -m venv .venv`
+    - Masuk .venv `.\.venv\Scripts\Activate`
+    - Masuk folder dashboard `cd dashboard`
+    ```python
+    # jalankan server
+    python dashboard.py
+    ```
 
 ## Detail Komponen tiap Pipeline Flow
 
@@ -206,7 +196,7 @@ Sistem ini dirancang agar dapat memisahkan beban kerja berat (AI Inference) deng
 
     - Output tahap ini: teks JSON berisi metadata pelanggaran yang dikirim secara real-time tanpa mengirim file videonya.
 
-Contoh Output:
+Contoh Output JSON:
 
 ```json
 {
@@ -266,94 +256,6 @@ Contoh Output:
     - Tren jam dan hari rawan penyerobotan jalur sepeda.
     - Proporsi jenis kendaraan yang paling sering melanggar (motor vs mobil vs lainnya).
 
-## Menjalankan Dashboard Real-Time (Flask)
-Dashboard ini berfungsi untuk menampilkan analitik dan live-feed CCTV secara real-time.
-Untuk menjalankannya:
-1. Pastikan `traffic_monitor.py` sedang berjalan di terminal terpisah. (Ini diperlukan untuk mengirimkan log analitik ke Kafka dan menyediakan live video stream di port 5001).
-2. Buka terminal baru dan masuk ke direktori dashboard:
-   ```bash
-   cd dashboard
-   ```
-3. Install package Flask jika belum: `pip install Flask`
-4. Jalankan server dashboard:
-   ```bash
-   python dashboard.py
-   ```
-5. Buka browser dan akses: `http://localhost:5000`
----
-
-## Kafka Setup & Handoff (Orang 2 → Orang 3)
-
-### Status
-Kafka broker (`kafka-lite`) sudah running via Docker Compose dengan dual listener (host + internal docker network), topic sudah dibuat dan diverifikasi end-to-end dari producer (`traffic_monitor.py`) sampai consumer test.
-
-### Koneksi ke Kafka
-
-| Konteks | Bootstrap Server |
-|---|---|
-| Dari **host** (script Python via `.venv`, testing) | `localhost:9092` |
-| Dari **container lain** di network `bigdata-net` (misal Spark container) | `kafka-lite:29092` |
-
-> Jika service Spark milik Orang 3 dijalankan via docker-compose, pastikan service tersebut ikut bergabung ke network `bigdata-net` agar bisa resolve hostname `kafka-lite`.
-
-### Topic
-
-- Nama topic: `surabaya-traffic-bikeline-violations`
-- Partitions: 3
-- Replication factor: 1
-- Retention: 2 jam (7.200.000 ms)
-
-Cek konfigurasi:
-```bash
-docker exec -it kafka-lite /opt/kafka/bin/kafka-topics.sh \
-  --describe --topic surabaya-traffic-bikeline-violations \
-  --bootstrap-server localhost:9092
-```
-
-### Skema Payload JSON
-
-```json
-{
-  "camera_id": "CCTV_BASRA_LOOP",
-  "location": "Depan TP1",
-  "timestamp": "2026-06-13T02:36:02Z",
-  "vehicle_type": "motorcycle",
-  "confidence_score": 0.3766
-}
-```
-
-Field detail:
-- `camera_id` (string): salah satu dari `CCTV_BASUKI_RAHMAT`, `CCTV_BAMBU_RUNCING`, `CCTV_BASRA_LOOP`, `CCTV_DARMO_MERCURE`.
-- `location` (string): nama lokasi human-readable.
-- `timestamp` (string, ISO 8601 UTC, format `%Y-%m-%dT%H:%M:%SZ`): waktu deteksi.
-- `vehicle_type` (string): salah satu dari `car`, `motorcycle`, `bus`, `truck`.
-- `confidence_score` (float, 4 desimal): confidence score deteksi YOLO.
-
-Catatan untuk windowing/aggregation Spark:
-- Field `timestamp` sudah dalam UTC ISO 8601, cocok dipakai langsung sebagai event-time column untuk `withWatermark` / window aggregation.
-- Tidak ada `id` unik per event — jika butuh dedup, bisa kombinasikan `camera_id` + `timestamp` + `vehicle_type`.
-
-### Cara Test Konsumsi Data (PySpark snippet starter)
-
-```python
-df = (
-    spark.readStream
-    .format("kafka")
-    .option("kafka.bootstrap.servers", "kafka-lite:29092")  # dari dalam container
-    .option("subscribe", "surabaya-traffic-bikeline-violations")
-    .option("startingOffsets", "earliest")
-    .load()
-)
-```
-
-Value-nya berupa bytes JSON — perlu di-parse dengan schema sesuai field di atas menggunakan `from_json`.
-
-### Validasi yang Sudah Dilakukan
-
-1. Kafka broker berhasil start tanpa error listener.
-2. Topic berhasil dibuat dengan konfigurasi di atas.
-3. `traffic_monitor.py` (producer) berhasil konek ke `localhost:9092` dan mengirim payload setiap ada pelanggaran (log: `✅ Kafka Producer terhubung`).
-4. `consumer_test.py` berhasil menerima dan menampilkan payload JSON secara real-time dari topic yang sama.
 
 ### File Terkait
 - `docker-compose.yml` — definisi service Kafka (+ skeleton service Spark)
@@ -362,25 +264,25 @@ Value-nya berupa bytes JSON — perlu di-parse dengan schema sesuai field di ata
 ## Key Configuration References
 
 **MinIO:**
-- Endpoint: http://localhost:9001
-- Access Key: minioadmin
-- Secret Key: minioadmin123
-- Buckets: bronze, silver, gold
+- Endpoint: `localhost:9001`
+- Access Key: `minioadmin`
+- Secret Key: `minioadmin123`
+- Buckets: `bronze`, `silver`, `gold`
 
 **Kafka:**
-- Bootstrap: localhost:9092
-- Topic: surabaya-traffic-bikeline-violations
+- Bootstrap: `localhost:9092`
+- Topic: `bikeline-violations`
 - Partitions: 3
 
 **Spark:**
-- Master: local[4]
-- S3A Endpoint: http://minio-storage:9000
-- Delta Lake Checkpoints: s3a://lakehouse/checkpoints/
+- Master: `local[4]`
+- S3A Endpoint: `http://minio-storage:9000`
+- Delta Lake Checkpoints: `s3a://lakehouse/checkpoints/`
 
 **Python Environment:**
-- Location: ~/.venv/
-- Python: 3.12.3
-- Packages: kafka-python, delta-spark, pyspark
+- Location: `~/.venv/`
+- Python: `3.12.3`
+- Packages: `kafka-python`, `delta-spark`, `pyspark`
 
 ---
 
